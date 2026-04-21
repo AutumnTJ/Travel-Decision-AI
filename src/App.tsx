@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAction } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Toaster, toast } from "sonner";
+import { track } from "./lib/track";
 import {
   runDecisionPipeline,
   type Verdict,
@@ -661,6 +662,7 @@ export default function App() {
         hotelName:        form.hotelName.trim(),
         rateEvaluation:   evaluateRateOptions(rateInputs),
       });
+      track("result_generated", { verdict: pipeline.verdict, city: form.city, country: form.country });
     } catch {
       toast.error("Failed to get a recommendation. Please try again.");
     } finally {
@@ -985,6 +987,19 @@ export default function App() {
             <p className="text-xs text-gray-900/30 mt-2">
               {fourState.verdict === "BOOK_NOW" ? "wait" : "book now"}
             </p>
+
+            {/* Check price — BOOK NOW only; href is replaced with affiliate link later */}
+            {fourState.verdict === "BOOK_NOW" && (
+              <a
+                href={pastedLink || "https://www.booking.com/"}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => track("check_price_clicked", { hotelName: result.hotelName })}
+                className="mt-8 block w-full text-center py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
+              >
+                Check price
+              </a>
+            )}
 
           </div>
         )}
