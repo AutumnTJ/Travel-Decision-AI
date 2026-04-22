@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useAction } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Toaster, toast } from "sonner";
 import { track } from "./lib/track";
@@ -522,6 +522,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   const getExplanation = useAction(api.advisor.getExplanation);
+  const logEvent       = useMutation(api.events.logEvent);
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -676,6 +677,18 @@ export default function App() {
         nextResult.factors.timePressure,
       );
       track("result_generated", { verdict: renderedVerdict, city: form.city, country: form.country });
+      logEvent({
+        eventType:   "result_generated",
+        verdict:     renderedVerdict,
+        hotelName:   nextResult.hotelName || undefined,
+        price:       nextResult.currentPrice,
+        city:        form.city,
+        country:     form.country,
+        checkIn:     form.checkIn  || undefined,
+        checkOut:    form.checkOut || undefined,
+        flexibility: form.flexibility || undefined,
+        urgency:     form.urgency     || undefined,
+      }).catch(() => {});
     } catch {
       toast.error("Failed to get a recommendation. Please try again.");
     } finally {
@@ -1084,7 +1097,18 @@ export default function App() {
                 href={pastedLink || "https://www.booking.com/"}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => track("check_price_clicked", { hotelName: result.hotelName })}
+                onClick={() => {
+                  track("check_price_clicked", { hotelName: result.hotelName });
+                  logEvent({
+                    eventType:    "check_price_clicked",
+                    verdict:      fourState.verdict,
+                    hotelName:    result.hotelName  || undefined,
+                    price:        result.currentPrice,
+                    city:         form.city    || undefined,
+                    country:      form.country  || undefined,
+                    outboundLink: pastedLink    || undefined,
+                  }).catch(() => {});
+                }}
                 className="mt-8 block w-full text-center py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
               >
                 Check price
@@ -1139,6 +1163,59 @@ export default function App() {
 
       </div>
       <Toaster />
+      {window.location.search.includes("debug") && <EventsDebugPanel />}
+    </div>
+  );
+}
+
+// ===========================================================================
+// Events debug panel — only visible at ?debug
+// ===========================================================================
+
+function EventsDebugPanel() {
+  const events = useQuery(api.events.listRecentEvents);
+
+  return (
+    <div className="fixed inset-0 bg-gray-950/90 overflow-auto z-50 p-6">
+      <div className="max-w-2xl mx-auto">
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-white font-semibold text-sm">Events log</p>
+          <a href={window.location.pathname} className="text-xs text-gray-400 hover:text-white">
+            ✕ close
+          </a>
+        </div>
+
+        {events === undefined && (
+          <p className="text-gray-400 text-xs">Loading…</p>
+        )}
+        {events?.length === 0 && (
+          <p className="text-gray-400 text-xs">No events yet.</p>
+        )}
+        {events && events.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {events.map((e) => (
+              <div key={e._id} className="bg-gray-900 rounded-lg px-4 py-3 text-xs font-mono">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-white font-semibold">{e.eventType}</span>
+                  <span className="text-gray-500">
+                    {new Date(e.timestamp).toLocaleString()}
+                  </span>
+                </div>
+                <div className="text-gray-400 flex flex-col gap-0.5">
+                  {e.verdict      && <span>verdict: <span className="text-gray-200">{e.verdict}</span></span>}
+                  {e.hotelName    && <span>hotel: <span className="text-gray-200">{e.hotelName}</span></span>}
+                  {e.price        && <span>price: <span className="text-gray-200">${e.price}/night</span></span>}
+                  {e.city         && <span>city: <span className="text-gray-200">{e.city}{e.country ? `, ${e.country}` : ""}</span></span>}
+                  {e.checkIn      && <span>stay: <span className="text-gray-200">{e.checkIn} → {e.checkOut}</span></span>}
+                  {e.flexibility  && <span>flexibility: <span className="text-gray-200">{e.flexibility}</span></span>}
+                  {e.urgency      && <span>urgency: <span className="text-gray-200">{e.urgency}</span></span>}
+                  {e.outboundLink && <span>link: <span className="text-gray-200 break-all">{e.outboundLink}</span></span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

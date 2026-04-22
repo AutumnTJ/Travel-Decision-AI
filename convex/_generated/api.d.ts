@@ -10,6 +10,7 @@
 
 import type * as advisor from "../advisor.js";
 import type * as auth from "../auth.js";
+import type * as events from "../events.js";
 import type * as http from "../http.js";
 import type * as router from "../router.js";
 
@@ -22,6 +23,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   advisor: typeof advisor;
   auth: typeof auth;
+  events: typeof events;
   http: typeof http;
   router: typeof router;
 }>;

@@ -1,11 +1,9 @@
-import { defineSchema, defineTable } from "convex/server";
-import { authTables } from "@convex-dev/auth/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-const applicationTables = {
-  appEvents: defineTable({
+export const logEvent = mutation({
+  args: {
     eventType:    v.string(),
-    timestamp:    v.number(),
     verdict:      v.optional(v.string()),
     hotelName:    v.optional(v.string()),
     price:        v.optional(v.number()),
@@ -16,10 +14,21 @@ const applicationTables = {
     flexibility:  v.optional(v.string()),
     urgency:      v.optional(v.string()),
     outboundLink: v.optional(v.string()),
-  }),
-};
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("appEvents", {
+      ...args,
+      timestamp: Date.now(),
+    });
+  },
+});
 
-export default defineSchema({
-  ...authTables,
-  ...applicationTables,
+export const listRecentEvents = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("appEvents")
+      .order("desc")
+      .take(100);
+  },
 });
