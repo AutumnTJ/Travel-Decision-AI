@@ -648,7 +648,7 @@ export default function App() {
         highTypical:   pipeline.factors.fareContext.highTypical,
       });
 
-      setResult({
+      const nextResult = {
         headline:         pipeline.headline,
         confidence:       pipeline.confidence,
         signal:           (raw ?? "").trim(),
@@ -661,8 +661,14 @@ export default function App() {
         flexibility:      form.flexibility,
         hotelName:        form.hotelName.trim(),
         rateEvaluation:   evaluateRateOptions(rateInputs),
-      });
-      track("result_generated", { verdict: pipeline.verdict, city: form.city, country: form.country });
+      };
+      setResult(nextResult);
+      const { verdict: renderedVerdict } = get4StateDecision(
+        nextResult.factors.pricePosition,
+        nextResult.factors.demand,
+        nextResult.factors.timePressure,
+      );
+      track("result_generated", { verdict: renderedVerdict, city: form.city, country: form.country });
     } catch {
       toast.error("Failed to get a recommendation. Please try again.");
     } finally {
