@@ -499,6 +499,9 @@ export default function App() {
   const [rateOptions,     setRateOptions]     = useState<RateOption[]>([]);
   const [showRateOptions, setShowRateOptions] = useState(false); // manual mode toggle
 
+  // ── refine panel ──────────────────────────────────────────────────────────
+  const [showRefine, setShowRefine] = useState(false);
+
   // ── result & UI state ──────────────────────────────────────────────────────
   const [result, setResult] = useState<{
     headline:         string;
@@ -549,9 +552,11 @@ export default function App() {
       hotelName: ctx.detectedHotelName ?? "",
       country: "", city: "", checkIn: "", checkOut: "",
     }));
-    setRateOptions([EMPTY_RATE()]);
+    setRateOptions([]);
+    setShowRateOptions(false);
     setResult(null);
     setShowWhy(false);
+    setShowRefine(false);
   }
 
   function handleBackToHome() {
@@ -560,6 +565,8 @@ export default function App() {
     setHotelLinkContext(null);
     setResult(null);
     setShowWhy(false);
+    setShowRefine(false);
+    handleDisableRateOptions();
   }
 
   // ── manual rate-options toggle ─────────────────────────────────────────────
@@ -587,7 +594,7 @@ export default function App() {
     if (tripDays <= 0) { toast.error("Check-out must be after check-in."); return; }
 
     // Determine the primary price for timing analysis
-    const isRateMode = appMode === "link-confirm" || showRateOptions;
+    const isRateMode = showRateOptions;
     let primaryPrice: number;
 
     if (isRateMode) {
@@ -779,57 +786,84 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Price — hidden when rate options are expanded */}
-              {!showRateOptions && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Current price per night ($)
-                  </label>
-                  <input type="number" placeholder="e.g. 180" min="1"
-                    value={form.price}
-                    onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-                    className={inputClass} required />
-                  <button type="button" onClick={handleEnableRateOptions}
-                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                    + Compare rate options
-                  </button>
-                </div>
-              )}
+              {/* Price */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Current price per night ($)
+                </label>
+                <input type="number" placeholder="e.g. 180" min="1"
+                  value={form.price}
+                  onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                  className={inputClass} required={!showRateOptions} />
+              </div>
 
-              {/* Rate options (optional in manual mode) */}
-              {showRateOptions && (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-sm font-medium text-gray-700">Rate options</label>
-                    <button type="button" onClick={handleDisableRateOptions}
-                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                      Remove
-                    </button>
-                  </div>
-                  {rateOptions.map((rate, i) => (
-                    <RateOptionCard key={rate.id} rate={rate} index={i}
-                      onChange={(u) => setRateOptions(prev => prev.map((r) => r.id === u.id ? u : r))}
-                      onRemove={() => setRateOptions(prev => prev.filter((r) => r.id !== rate.id))}
-                      canRemove={rateOptions.length > 1}
-                    />
-                  ))}
-                  {rateOptions.length < 3 && (
-                    <button type="button" onClick={() => setRateOptions(prev => [...prev, EMPTY_RATE()])}
-                      className="text-xs text-gray-500 border border-dashed border-gray-300 rounded-xl py-2.5 hover:border-gray-400 hover:text-gray-700 transition-colors">
-                      + Add another rate
-                    </button>
+              {/* Refine (optional) */}
+              <div className="flex flex-col gap-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (showRefine) { handleDisableRateOptions(); }
+                    setShowRefine(v => !v);
+                  }}
+                  className="flex items-center justify-between w-full py-2 text-left group"
+                >
+                  <span className="flex items-center gap-2 text-xs text-gray-400 group-hover:text-gray-600 transition-colors">
+                    <span className="text-gray-300 group-hover:text-gray-500 transition-colors">
+                      {showRefine ? "▾" : "▸"}
+                    </span>
+                    Refine (optional)
+                  </span>
+                  {!showRefine && (
+                    <span className="text-xs text-gray-300">Works fine without this</span>
                   )}
-                </div>
-              )}
+                </button>
 
-              <OptionPills<Flexibility>
-                label="Flexibility" options={["Fixed dates", "Flexible"]}
-                value={form.flexibility} onChange={(v) => setForm((f) => ({ ...f, flexibility: v }))}
-                optional />
-              <OptionPills<Urgency>
-                label="Urgency" options={["Low", "Medium", "High"]}
-                value={form.urgency} onChange={(v) => setForm((f) => ({ ...f, urgency: v }))}
-                optional />
+                {showRefine && (
+                  <div className="flex flex-col gap-5 pt-3 pb-1 border-t border-gray-100 mt-1">
+
+                    <OptionPills<Flexibility>
+                      label="Flexibility" options={["Fixed dates", "Flexible"]}
+                      value={form.flexibility} onChange={(v) => setForm((f) => ({ ...f, flexibility: v }))}
+                      optional />
+                    <OptionPills<Urgency>
+                      label="Urgency" options={["Low", "Medium", "High"]}
+                      value={form.urgency} onChange={(v) => setForm((f) => ({ ...f, urgency: v }))}
+                      optional />
+
+                    {/* Rate comparison */}
+                    {!showRateOptions ? (
+                      <button type="button" onClick={handleEnableRateOptions}
+                        className="text-xs text-gray-400 hover:text-gray-600 transition-colors text-left">
+                        + Compare rate options
+                      </button>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-sm font-medium text-gray-700">Rate options</label>
+                          <button type="button" onClick={handleDisableRateOptions}
+                            className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                            Remove
+                          </button>
+                        </div>
+                        {rateOptions.map((rate, i) => (
+                          <RateOptionCard key={rate.id} rate={rate} index={i}
+                            onChange={(u) => setRateOptions(prev => prev.map((r) => r.id === u.id ? u : r))}
+                            onRemove={() => setRateOptions(prev => prev.filter((r) => r.id !== rate.id))}
+                            canRemove={rateOptions.length > 1}
+                          />
+                        ))}
+                        {rateOptions.length < 3 && (
+                          <button type="button" onClick={() => setRateOptions(prev => [...prev, EMPTY_RATE()])}
+                            className="text-xs text-gray-500 border border-dashed border-gray-300 rounded-xl py-2.5 hover:border-gray-400 hover:text-gray-700 transition-colors">
+                            + Add another rate
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                  </div>
+                )}
+              </div>
 
               <button type="submit" disabled={loading}
                 className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1">
@@ -923,32 +957,82 @@ export default function App() {
               </div>
             </div>
 
-            {/* Rate options (required — at least 1) */}
-            <div className="flex flex-col gap-3">
-              <label className="block text-sm font-medium text-gray-700">Rate options</label>
-              {rateOptions.map((rate, i) => (
-                <RateOptionCard key={rate.id} rate={rate} index={i}
-                  onChange={(u) => setRateOptions(prev => prev.map((r) => r.id === u.id ? u : r))}
-                  onRemove={() => setRateOptions(prev => prev.filter((r) => r.id !== rate.id))}
-                  canRemove={rateOptions.length > 1}
-                />
-              ))}
-              {rateOptions.length < 3 && (
-                <button type="button" onClick={() => setRateOptions(prev => [...prev, EMPTY_RATE()])}
-                  className="text-xs text-gray-500 border border-dashed border-gray-300 rounded-xl py-2.5 hover:border-gray-400 hover:text-gray-700 transition-colors">
-                  + Add another rate
-                </button>
-              )}
+            {/* Price */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Current price per night ($)
+              </label>
+              <input type="number" placeholder="e.g. 180" min="1"
+                value={form.price}
+                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                className={inputClass} required={!showRateOptions} />
             </div>
 
-            <OptionPills<Flexibility>
-              label="Flexibility" options={["Fixed dates", "Flexible"]}
-              value={form.flexibility} onChange={(v) => setForm((f) => ({ ...f, flexibility: v }))}
-              optional />
-            <OptionPills<Urgency>
-              label="Urgency" options={["Low", "Medium", "High"]}
-              value={form.urgency} onChange={(v) => setForm((f) => ({ ...f, urgency: v }))}
-              optional />
+            {/* Refine (optional) */}
+            <div className="flex flex-col gap-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (showRefine) { handleDisableRateOptions(); }
+                  setShowRefine(v => !v);
+                }}
+                className="flex items-center justify-between w-full py-2 text-left group"
+              >
+                <span className="flex items-center gap-2 text-xs text-gray-400 group-hover:text-gray-600 transition-colors">
+                  <span className="text-gray-300 group-hover:text-gray-500 transition-colors">
+                    {showRefine ? "▾" : "▸"}
+                  </span>
+                  Refine (optional)
+                </span>
+                {!showRefine && (
+                  <span className="text-xs text-gray-300">Works fine without this</span>
+                )}
+              </button>
+
+              {showRefine && (
+                <div className="flex flex-col gap-5 pt-3 pb-1 border-t border-gray-100 mt-1">
+                  <OptionPills<Flexibility>
+                    label="Flexibility" options={["Fixed dates", "Flexible"]}
+                    value={form.flexibility} onChange={(v) => setForm((f) => ({ ...f, flexibility: v }))}
+                    optional />
+                  <OptionPills<Urgency>
+                    label="Urgency" options={["Low", "Medium", "High"]}
+                    value={form.urgency} onChange={(v) => setForm((f) => ({ ...f, urgency: v }))}
+                    optional />
+
+                  {/* Rate comparison */}
+                  {!showRateOptions ? (
+                    <button type="button" onClick={handleEnableRateOptions}
+                      className="text-xs text-gray-400 hover:text-gray-600 transition-colors text-left">
+                      + Compare rate options
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-sm font-medium text-gray-700">Rate options</label>
+                        <button type="button" onClick={handleDisableRateOptions}
+                          className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                          Remove
+                        </button>
+                      </div>
+                      {rateOptions.map((rate, i) => (
+                        <RateOptionCard key={rate.id} rate={rate} index={i}
+                          onChange={(u) => setRateOptions(prev => prev.map((r) => r.id === u.id ? u : r))}
+                          onRemove={() => setRateOptions(prev => prev.filter((r) => r.id !== rate.id))}
+                          canRemove={rateOptions.length > 1}
+                        />
+                      ))}
+                      {rateOptions.length < 3 && (
+                        <button type="button" onClick={() => setRateOptions(prev => [...prev, EMPTY_RATE()])}
+                          className="text-xs text-gray-500 border border-dashed border-gray-300 rounded-xl py-2.5 hover:border-gray-400 hover:text-gray-700 transition-colors">
+                          + Add another rate
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             <button type="submit" disabled={loading}
               className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1">
