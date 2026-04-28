@@ -246,6 +246,51 @@ function getEnrichedSourceBasis(original: string, hasValueChip: boolean, factors
 }
 
 // ===========================================================================
+// Verdict reason layer — 1-2 short lines explaining the decision
+// ===========================================================================
+
+function getVerdictReason(
+  verdict:     "BOOK_NOW" | "WAIT",
+  priceSignal: PriceSignal,
+  factors:     FactorStates
+): { line1: string; line2?: string } {
+  const { timePressure } = factors;
+
+  if (verdict === "BOOK_NOW") {
+    if (priceSignal === "rising" && timePressure === "high")
+      return {
+        line1: "Prices look elevated and check-in is close.",
+        line2: "Waiting is unlikely to improve this rate.",
+      };
+    if (priceSignal === "rising")
+      return {
+        line1: "Prices are on the higher side and may not drop soon.",
+        line2: "Booking now reduces the chance of paying more later.",
+      };
+    if (timePressure === "high")
+      return {
+        line1: "Check-in is close — options at this rate may not last.",
+        line2: "Booking now removes last-minute uncertainty.",
+      };
+    return {
+      line1: "Conditions lean toward booking now.",
+      line2: "Waiting is unlikely to bring a meaningfully better rate.",
+    };
+  }
+
+  // WAIT — always clarify this means "don't book yet"
+  if (priceSignal === "dropping")
+    return {
+      line1: "No need to book yet — this price may still come down.",
+      line2: timePressure === "low" ? "You have time to wait for a better rate." : undefined,
+    };
+  return {
+    line1: "No need to book right now.",
+    line2: "Prices look stable and there is still time before check-in.",
+  };
+}
+
+// ===========================================================================
 // 4-state decision mapping — pure, deterministic
 // ===========================================================================
 
@@ -1074,24 +1119,23 @@ export default function App() {
 
             {/* Primary decision */}
             <p className="text-5xl font-black tracking-tight text-gray-900 leading-none">
-              {fourState.verdict === "BOOK_NOW" ? "Book now" : "Wait"}
+              {fourState.verdict === "BOOK_NOW" ? "Book now" : "Wait for now"}
             </p>
 
-            {/* 2 support lines */}
-            <div className="flex flex-col gap-2">
-              <p className="text-sm text-gray-500">price {fourState.priceSignal}</p>
-              <p className="text-sm text-gray-500">rooms {fourState.roomsSignal}</p>
-            </div>
+            {/* Reason layer — explains the verdict in 1–2 short lines */}
+            {(() => {
+              const reason = getVerdictReason(fourState.verdict, fourState.priceSignal, result.factors);
+              return (
+                <div className="flex flex-col gap-1.5">
+                  <p className="text-sm text-gray-500 leading-relaxed">{reason.line1}</p>
+                  {reason.line2 && (
+                    <p className="text-sm text-gray-400 leading-relaxed">{reason.line2}</p>
+                  )}
+                </div>
+              );
+            })()}
 
-            {/* Divider — decision boundary */}
-            <div className="mt-2 mb-2 h-px bg-gray-200" />
-
-            {/* Opposite option — present but not the answer */}
-            <p className="text-xs text-gray-900/30 mt-2">
-              {fourState.verdict === "BOOK_NOW" ? "wait" : "book now"}
-            </p>
-
-            {/* Check price — BOOK NOW only; href is replaced with affiliate link later */}
+            {/* CTA — BOOK NOW only; href is replaced with affiliate link later */}
             {fourState.verdict === "BOOK_NOW" && (
               <a
                 href={pastedLink || "https://www.booking.com/"}
@@ -1109,9 +1153,9 @@ export default function App() {
                     outboundLink: pastedLink    || undefined,
                   }).catch(() => {});
                 }}
-                className="mt-8 block w-full text-center py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
+                className="block w-full text-center py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
               >
-                Check price
+                View &amp; book this hotel
               </a>
             )}
 
