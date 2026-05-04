@@ -112,56 +112,73 @@ const CHIP_COLOR: {
   },
 };
 
-function getWhyBullets(verdict: Verdict, factors: FactorStates): string[] {
+function getWhyBullets(verdict: Verdict, factors: FactorStates, flexibility?: string): string[] {
   const { pricePosition, timePressure, demand } = factors;
+  const isFixed    = flexibility === "Fixed dates";
+  const isFlexible = flexibility === "Flexible";
+
   if (verdict === "BOOK_NOW") {
     if (pricePosition === "good" && timePressure === "high") return [
-      "This price is already on the lower side for your dates",
-      "Check-in is close, and options at this price may not last",
-      "Booking now removes any last-minute uncertainty",
+      "The nightly price looks favorable for this stay.",
+      "Your trip timing gives less room to wait comfortably.",
+      isFixed
+        ? "Because your dates are fixed, losing this option may be more costly."
+        : "If the price feels acceptable, checking the latest price now reduces decision risk.",
     ];
     if (pricePosition === "good") return [
-      "This price is already on the lower side for your dates",
-      "Waiting may not create much additional upside",
-      "Availability may tighten as check-in approaches",
+      "The nightly price looks favorable for this stay.",
+      "Waiting may not give enough benefit if this hotel already fits your needs.",
+      isFixed
+        ? "Because your dates are fixed, locking in now may be less stressful."
+        : "If the price feels acceptable, checking the latest price now reduces decision risk.",
     ];
     if (timePressure === "high") return [
-      "Check-in is close and prices rarely improve at this stage",
-      "Options at this price may not stay available",
-      "Booking now reduces last-minute uncertainty",
+      "Your trip timing gives less room to wait comfortably.",
+      "Waiting may not give enough benefit at this stage.",
+      isFixed
+        ? "Because your dates are fixed, losing this option may be more costly."
+        : "If the price feels acceptable, checking the latest price now reduces decision risk.",
     ];
     if (demand === "high") return [
-      "This is a busy period for this destination",
-      "Good options tend to go earlier in high-demand periods",
-      "This rate is fair for the conditions",
+      "Your trip is during a high-demand travel period for this destination.",
+      "Waiting may not give enough benefit if this hotel already fits your needs.",
+      "If the price feels acceptable, checking the latest price now reduces decision risk.",
     ];
     return [
-      "This rate is reasonable for these dates",
-      "Waiting may not offer much price upside from here",
-      "Conditions lean toward booking now",
+      "Your trip timing gives less room to wait comfortably.",
+      "Waiting may not give enough benefit if this hotel already fits your needs.",
+      isFixed
+        ? "Because your dates are fixed, locking in sooner may be less stressful."
+        : "If the price feels acceptable, checking the latest price now reduces decision risk.",
     ];
   }
+
   if (verdict === "WAIT") {
     if (pricePosition === "expensive" && timePressure === "low") return [
-      "This price is higher than what is typically seen",
-      "You still have enough time before your trip",
-      "Waiting may give you a better opportunity",
+      "The current nightly price looks higher than the typical range for this destination.",
+      "Your trip is still far enough away to recheck later.",
+      isFlexible
+        ? "If your dates are flexible, waiting a little may still be reasonable."
+        : "Waiting a little may help you compare with more confidence.",
     ];
     if (pricePosition === "expensive") return [
-      "This price is on the higher side for these dates",
-      "There is still some time before check-in",
-      "A better rate may still appear",
+      "The current nightly price looks on the higher side based on typical ranges.",
+      "There is still some time before check-in.",
+      "Waiting a little may help you compare with more confidence.",
     ];
     return [
-      "The fare is in a typical range",
-      "There is no strong signal to book today",
-      "Giving it a little more time is reasonable",
+      "The current nightly price does not create strong urgency.",
+      "Your trip is still far enough away to recheck later.",
+      isFlexible
+        ? "If your dates are flexible, waiting a little may still be reasonable."
+        : "Waiting a little may help you compare with more confidence.",
     ];
   }
+
   return [
-    "The current price is reasonable but not especially low",
-    "Timing is a factor, but not urgently yet",
-    "Checking again soon may help clarify the decision",
+    "The current nightly price is in a typical range — not urgently high or low.",
+    "There is no strong signal to act today.",
+    "Checking again later may help clarify the decision.",
   ];
 }
 
@@ -259,34 +276,34 @@ function getVerdictReason(
   if (verdict === "BOOK_NOW") {
     if (priceSignal === "rising" && timePressure === "high")
       return {
-        line1: "Prices look elevated and check-in is close.",
-        line2: "Waiting is unlikely to improve this rate.",
+        line1: "The nightly price looks on the higher side and check-in is close.",
+        line2: "Waiting may not give much upside at this stage.",
       };
     if (priceSignal === "rising")
       return {
-        line1: "Prices are on the higher side and may not drop soon.",
-        line2: "Booking now reduces the chance of paying more later.",
+        line1: "The nightly price looks on the higher side, so waiting may not add much value.",
+        line2: "Checking the latest price now may reduce decision risk.",
       };
     if (timePressure === "high")
       return {
-        line1: "Check-in is close — options at this rate may not last.",
-        line2: "Booking now removes last-minute uncertainty.",
+        line1: "Check-in is close — locking in now removes last-minute uncertainty.",
+        line2: "Booking now may be more comfortable than waiting.",
       };
     return {
       line1: "Conditions lean toward booking now.",
-      line2: "Waiting is unlikely to bring a meaningfully better rate.",
+      line2: "Waiting may not give much upside if the hotel already fits your needs.",
     };
   }
 
   // WAIT — always clarify this means "don't book yet"
   if (priceSignal === "dropping")
     return {
-      line1: "No need to book yet — this price may still come down.",
-      line2: timePressure === "low" ? "You have time to wait for a better rate." : undefined,
+      line1: "No need to book yet — checking again later may help clarify the decision.",
+      line2: timePressure === "low" ? "You still have time before your trip." : undefined,
     };
   return {
     line1: "No need to book right now.",
-    line2: "Prices look stable and there is still time before check-in.",
+    line2: "There is still time before check-in, and no strong signal to act today.",
   };
 }
 
@@ -591,6 +608,11 @@ export default function App() {
     const url = pastedLink.trim();
     if (!url) { toast.error("Please paste a hotel link."); return; }
     const ctx = getHotelLinkContext(url);
+    track("hotel_link_entered", {
+      hasHotelLink: true,
+      sourceLabel: ctx.sourceLabel,
+      extractionStatus: ctx.extractionStatus,
+    });
     setHotelLinkContext(ctx);
     setAppMode("link-confirm");
     setForm(f => ({
@@ -721,7 +743,23 @@ export default function App() {
         nextResult.factors.demand,
         nextResult.factors.timePressure,
       );
-      track("result_generated", { verdict: renderedVerdict, city: form.city, country: form.country });
+      track("result_generated", {
+        verdict:       renderedVerdict,
+        destination:   form.city,
+        daysUntilTrip: daysUntilCheckIn,
+        hasHotelLink:  !!pastedLink,
+        price:         primaryPrice,
+        flexibility:   form.flexibility || undefined,
+        cancellation:  rateOptions.length > 0 ? rateOptions[0].refundable : undefined,
+      });
+      track("verdict_shown", {
+        verdict:       renderedVerdict,
+        destination:   form.city,
+        daysUntilTrip: daysUntilCheckIn,
+        hasHotelLink:  !!pastedLink,
+        price:         primaryPrice,
+        flexibility:   form.flexibility || undefined,
+      });
       logEvent({
         eventType:   "result_generated",
         verdict:     renderedVerdict,
@@ -1135,14 +1173,41 @@ export default function App() {
               );
             })()}
 
-            {/* CTA — BOOK NOW only; href is replaced with affiliate link later */}
-            {fourState.verdict === "BOOK_NOW" && (
+            {/* Why this makes sense — micro reason layer */}
+            {(() => {
+              const bullets = getWhyBullets(fourState.verdict, result.factors, result.flexibility);
+              return (
+                <div className="flex flex-col gap-3 pt-4 border-t border-gray-100">
+                  <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+                    Why this makes sense
+                  </p>
+                  <ul className="flex flex-col gap-2">
+                    {bullets.map((b, i) => (
+                      <li key={i} className="flex gap-2 text-sm text-gray-500 leading-relaxed">
+                        <span className="text-gray-300 shrink-0 mt-0.5">—</span>
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
+
+            {/* CTA — context-appropriate action */}
+            {fourState.verdict === "BOOK_NOW" ? (
               <a
                 href={pastedLink || "https://www.booking.com/"}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => {
-                  track("check_price_clicked", { hotelName: result.hotelName });
+                  track("check_price_clicked", {
+                    verdict:       fourState.verdict,
+                    destination:   form.city,
+                    daysUntilTrip: result.daysUntilCheckIn,
+                    hasHotelLink:  !!pastedLink,
+                    price:         result.currentPrice,
+                    flexibility:   result.flexibility || undefined,
+                  });
                   logEvent({
                     eventType:    "check_price_clicked",
                     verdict:      fourState.verdict,
@@ -1155,8 +1220,12 @@ export default function App() {
                 }}
                 className="block w-full text-center py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
               >
-                View &amp; book this hotel
+                Check latest price
               </a>
+            ) : (
+              <div className="w-full text-center py-3 rounded-xl bg-gray-100 text-gray-500 text-sm font-medium">
+                Check again later
+              </div>
             )}
 
           </div>
