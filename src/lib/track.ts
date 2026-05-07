@@ -1,7 +1,14 @@
 // Lightweight event tracking wrapper — wire to any analytics provider later.
 // Drop-in replacement: swap the console.log body for window.gtag / posthog / etc.
 
-type TrackEvent = "result_generated" | "verdict_shown" | "check_price_clicked" | "hotel_link_entered";
+type TrackEvent =
+  | "page_view"
+  | "start_decision"
+  | "destination_entered"
+  | "hotel_link_entered"
+  | "result_generated"
+  | "check_price_clicked"
+  | "drop_off_before_result";
 
 export function track(event: TrackEvent, props?: Record<string, unknown>): void {
   try {

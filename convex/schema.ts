@@ -16,6 +16,9 @@ const applicationTables = {
     flexibility:  v.optional(v.string()),
     urgency:      v.optional(v.string()),
     outboundLink: v.optional(v.string()),
+    hasHotelLink: v.optional(v.boolean()),
+    daysUntilTrip: v.optional(v.number()),
+    source: v.optional(v.string()),
   }),
 };
 

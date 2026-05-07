@@ -17,6 +17,7 @@
     "openai": "^6.34.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
+    "react-router-dom": "^7.15.0",
     "sonner": "^2.0.3",
     "tailwind-merge": "^3.1.0"
   },

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { Toaster, toast } from "sonner";
@@ -586,6 +586,32 @@ export default function App() {
   const getExplanation = useAction(api.advisor.getExplanation);
   const logEvent       = useMutation(api.events.logEvent);
 
+  // ── analytics: page_view + drop-off detection ─────────────────────────────
+  useEffect(() => {
+    const ts = new Date().toISOString();
+    // If a prior session started but never produced a result, log the drop-off
+    const priorStart = localStorage.getItem("_dp_started");
+    if (priorStart) {
+      track("drop_off_before_result", { priorSessionStarted: priorStart, timestamp: ts });
+      logEvent({ eventType: "drop_off_before_result" }).catch(() => {});
+      localStorage.removeItem("_dp_started");
+    }
+    track("page_view", { timestamp: ts });
+    logEvent({ eventType: "page_view" }).catch(() => {});
+  // logEvent is a stable Convex mutation ref — safe to omit from deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── analytics: destination_entered ────────────────────────────────────────
+  useEffect(() => {
+    if (!form.city) return;
+    const ts = new Date().toISOString();
+    track("destination_entered", { country: form.country, city: form.city, timestamp: ts });
+    logEvent({ eventType: "destination_entered", country: form.country, city: form.city }).catch(() => {});
+  // fires only when city changes; form.country is always set before city
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.city]);
+
   // ── helpers ────────────────────────────────────────────────────────────────
 
   function getTripDays(checkIn = form.checkIn, checkOut = form.checkOut): number {
@@ -609,10 +635,16 @@ export default function App() {
     if (!url) { toast.error("Please paste a hotel link."); return; }
     const ctx = getHotelLinkContext(url);
     track("hotel_link_entered", {
-      hasHotelLink: true,
-      sourceLabel: ctx.sourceLabel,
+      hasHotelLink:     true,
+      sourceLabel:      ctx.sourceLabel,
       extractionStatus: ctx.extractionStatus,
+      timestamp:        new Date().toISOString(),
     });
+    logEvent({
+      eventType:    "hotel_link_entered",
+      hasHotelLink: true,
+      outboundLink: url,
+    }).catch(() => {});
     setHotelLinkContext(ctx);
     setAppMode("link-confirm");
     setForm(f => ({
@@ -701,6 +733,21 @@ export default function App() {
         breakfastIncluded: r.breakfastIncluded,
       }));
 
+    // Analytics: start_decision fires after validation passes
+    const startTs = new Date().toISOString();
+    track("start_decision", {
+      destination:  form.city,
+      hasHotelLink: !!pastedLink,
+      timestamp:    startTs,
+    });
+    logEvent({
+      eventType:    "start_decision",
+      city:         form.city,
+      country:      form.country,
+      hasHotelLink: !!pastedLink,
+    }).catch(() => {});
+    localStorage.setItem("_dp_started", startTs);
+
     setLoading(true);
     setResult(null);
     setShowWhy(false);
@@ -743,7 +790,9 @@ export default function App() {
         nextResult.factors.demand,
         nextResult.factors.timePressure,
       );
+      localStorage.removeItem("_dp_started");
       track("result_generated", {
+        event:         "result_generated",
         verdict:       renderedVerdict,
         destination:   form.city,
         daysUntilTrip: daysUntilCheckIn,
@@ -751,26 +800,21 @@ export default function App() {
         price:         primaryPrice,
         flexibility:   form.flexibility || undefined,
         cancellation:  rateOptions.length > 0 ? rateOptions[0].refundable : undefined,
-      });
-      track("verdict_shown", {
-        verdict:       renderedVerdict,
-        destination:   form.city,
-        daysUntilTrip: daysUntilCheckIn,
-        hasHotelLink:  !!pastedLink,
-        price:         primaryPrice,
-        flexibility:   form.flexibility || undefined,
+        timestamp:     new Date().toISOString(),
       });
       logEvent({
-        eventType:   "result_generated",
-        verdict:     renderedVerdict,
-        hotelName:   nextResult.hotelName || undefined,
-        price:       nextResult.currentPrice,
-        city:        form.city,
-        country:     form.country,
-        checkIn:     form.checkIn  || undefined,
-        checkOut:    form.checkOut || undefined,
-        flexibility: form.flexibility || undefined,
-        urgency:     form.urgency     || undefined,
+        eventType:     "result_generated",
+        verdict:       renderedVerdict,
+        hotelName:     nextResult.hotelName || undefined,
+        price:         nextResult.currentPrice,
+        city:          form.city,
+        country:       form.country,
+        checkIn:       form.checkIn    || undefined,
+        checkOut:      form.checkOut   || undefined,
+        flexibility:   form.flexibility || undefined,
+        urgency:       form.urgency    || undefined,
+        hasHotelLink:  !!pastedLink,
+        daysUntilTrip: daysUntilCheckIn,
       }).catch(() => {});
     } catch {
       toast.error("Failed to get a recommendation. Please try again.");
@@ -793,13 +837,10 @@ export default function App() {
 
         {/* ── Page heading ─────────────────────────────────────────────────── */}
         <h1 className="text-2xl font-bold text-gray-900 mb-2 leading-snug">
-          Should You Book This Hotel Now — or Wait?
+          Not sure if you should book this hotel now or wait?
         </h1>
-        <p className="text-sm text-gray-500 mb-1">
-          A quick, calm way to decide if it&apos;s better to book now or give it a little more time.
-        </p>
-        <p className="text-xs text-gray-400 mb-10">
-          Best for trips where price and availability may change quickly.
+        <p className="text-sm text-gray-500 mb-10">
+          Get a simple second opinion before you reserve.
         </p>
 
         {/* ================================================================= */}
@@ -930,7 +971,7 @@ export default function App() {
                     {!showRateOptions ? (
                       <button type="button" onClick={handleEnableRateOptions}
                         className="text-xs text-gray-400 hover:text-gray-600 transition-colors text-left">
-                        + Compare rate options
+                        + I have multiple rates
                       </button>
                     ) : (
                       <div className="flex flex-col gap-3">
@@ -963,7 +1004,7 @@ export default function App() {
 
               <button type="submit" disabled={loading}
                 className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1">
-                {loading ? "Thinking…" : "Should I book now?"}
+                {loading ? "Thinking…" : "Get a second opinion"}
               </button>
             </form>
           </>
@@ -1132,7 +1173,7 @@ export default function App() {
 
             <button type="submit" disabled={loading}
               className="w-full py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-1">
-              {loading ? "Thinking…" : "Should I book now?"}
+              {loading ? "Thinking…" : "Get a second opinion"}
             </button>
           </form>
         )}
@@ -1220,11 +1261,39 @@ export default function App() {
                 }}
                 className="block w-full text-center py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
               >
-                Check latest price
+                Check current price &amp; availability
+              </a>
+            ) : fourState.verdict === "MONITOR" ? (
+              <a
+                href={pastedLink || "https://www.booking.com/"}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => {
+                  track("check_price_clicked", {
+                    verdict:       fourState.verdict,
+                    destination:   form.city,
+                    daysUntilTrip: result.daysUntilCheckIn,
+                    hasHotelLink:  !!pastedLink,
+                    price:         result.currentPrice,
+                    flexibility:   result.flexibility || undefined,
+                  });
+                  logEvent({
+                    eventType:    "check_price_clicked",
+                    verdict:      fourState.verdict,
+                    hotelName:    result.hotelName  || undefined,
+                    price:        result.currentPrice,
+                    city:         form.city    || undefined,
+                    country:      form.country  || undefined,
+                    outboundLink: pastedLink    || undefined,
+                  }).catch(() => {});
+                }}
+                className="block w-full text-center py-3 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-700 transition-colors"
+              >
+                Compare cancellable options
               </a>
             ) : (
               <div className="w-full text-center py-3 rounded-xl bg-gray-100 text-gray-500 text-sm font-medium">
-                Check again later
+                Recheck closer to your trip
               </div>
             )}
 
